@@ -1,0 +1,8 @@
+# Pinned native engine inputs. fetch-engines.sh refuses anything whose SHA-256 differs.
+XRAY_TAG=v26.9.9
+XRAY_ASSET=Xray-android-arm64-v8a.zip
+XRAY_URL=https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-android-arm64-v8a.zip
+XRAY_SHA256=f18625edf2360df8f857d8a2d947f69dd137b31849e7b9b530200d7e5f482766
+# hev-socks5-tunnel (MIT) is vendored in third_party/ (checked in, hash below)
+HEV_AAR=third_party/hev-socks5-tunnel/hev-socks5-tunnel.aar
+HEV_SHA256=ae8a2e96b80b4eccccd037805a4bb4a278090c89dbcae8bc6fcb7634e9a255b9
