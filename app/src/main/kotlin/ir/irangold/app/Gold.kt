@@ -75,6 +75,12 @@ object Gold {
 
     private fun publish(s: Snapshot) { snapshot = s }
 
+    /** Live progress text while an engine is starting (e.g. Tor bootstrap %). */
+    fun progress(msg: String) {
+        val cur = snapshot
+        if (cur.phase == Phase.CONNECTING) snapshot = cur.copy(message = msg)
+    }
+
     /** Runs on the service's worker thread until the user disconnects. */
     fun runSession(plane: DataPlane) {
         stopRequested = false

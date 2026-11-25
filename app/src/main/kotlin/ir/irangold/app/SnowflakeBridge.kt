@@ -11,7 +11,7 @@ class SnowflakeBridge(ctx: Context) {
     private val stateDir = File(ctx.cacheDir, "pt").apply { mkdirs() }.absolutePath
     private var controller: Controller? = null
 
-    fun start(): Int {
+    fun start(v: SnowflakeVariant): Int {
         val c = Controller(
             stateDir, false, false, "ERROR",
             object : OnTransportEvents {
@@ -20,8 +20,9 @@ class SnowflakeBridge(ctx: Context) {
                 override fun stopped(name: String?, error: java.lang.Exception?) {}
             },
         )
-        c.snowflakeBrokerUrl = SnowflakeDefaults.BROKER_URL
-        c.snowflakeFrontDomains = SnowflakeDefaults.FRONT_DOMAINS
+        c.snowflakeBrokerUrl = v.broker
+        c.snowflakeFrontDomains = v.fronts
+        if (v.ampCache.isNotEmpty()) c.snowflakeAmpCacheUrl = v.ampCache
         c.snowflakeIceServers = SnowflakeDefaults.ICE_SERVERS
         c.start(IPtProxy.Snowflake, "")
         controller = c
