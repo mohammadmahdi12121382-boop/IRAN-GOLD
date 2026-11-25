@@ -41,6 +41,7 @@ class Controller(
     @Volatile private var cancelled = false
     private var active: Engine? = null
     private var since: Long? = null
+    private val failures = ArrayList<String>()
     private var last: Snapshot = Snapshot(Phase.IDLE, null, null, 0, "قطع", null)
 
     fun snapshot(): Snapshot = last
@@ -59,6 +60,7 @@ class Controller(
     /** Blocking. Probes engines best-first, keeps the best, builds the route. */
     fun connect(): Boolean = synchronized(lock) {
         cancelled = false
+        failures.clear()
         ladder.reset()
         publish(Phase.CONNECTING, null, null, 0, "در حال انتخاب بهترین موتور…")
         val net = networkId()
@@ -68,9 +70,9 @@ class Controller(
         var bestScore = -1
         for (e in order) {
             if (cancelled) return false
-            if (!e.isAvailable()) continue
+            if (!e.isAvailable()) { failures.add("${e.displayName}: ${e.unavailableReason()}"); continue }
             val br = breakers.getValue(e.id)
-            if (!br.allowAttempt()) continue
+            if (!br.allowAttempt()) { failures.add("${e.displayName}: موقتاً غیرفعال (circuit breaker)"); continue }
             publish(Phase.CONNECTING, e, null, 0, "آزمایش ${e.displayName}…")
             val (rep, sc) = probe(e, br, net)
             if (cancelled) { safeStop(e); return false }
@@ -86,7 +88,7 @@ class Controller(
         for (e in engines) if (e !== best) safeStop(e)
         val winner = best
         if (winner == null) {
-            failClosed("هیچ موتوری سالم نبود")
+            failClosed("هیچ موتوری سالم نبود\n" + failures.joinToString("\n"))
             return false
         }
         active = winner
@@ -102,10 +104,11 @@ class Controller(
             val rep = e.healthCheck()
             val sc = e.score(rep)
             memory.record(net, e.id, sc)
-            if (rep.ok) br.recordSuccess() else br.recordFailure()
+            if (rep.ok) br.recordSuccess() else { br.recordFailure(); failures.add("${e.displayName}: ${rep.failedStage} — ${Redactor.redact(rep.detail)}") }
             rep to sc
         } catch (ex: Exception) {
             br.recordFailure()
+            failures.add("${e.displayName}: ${Redactor.redact(ex.message ?: ex.javaClass.simpleName)}")
             memory.record(net, e.id, 0)
             null to 0
         }
