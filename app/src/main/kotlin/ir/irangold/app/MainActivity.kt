@@ -159,7 +159,7 @@ private fun MainScreen(openSettings: () -> Unit) {
                 for ((k, label) in listOf("auto" to "خودکار", "xray" to "Xray", "tor" to "Tor")) {
                     FilterChip(
                         selected = Gold.engineMode == k,
-                        onClick = { if (!active) Gold.setEngineMode(k) },
+                        onClick = { if (!active) Gold.updateEngineMode(k) },
                         label = { Text(label) },
                     )
                 }
@@ -227,7 +227,7 @@ private fun SettingsScreen(back: () -> Unit) {
                     Text("کیل‌سوییچ", color = Color.White, fontWeight = FontWeight.Medium)
                     Text("اگر هیچ موتوری سالم نبود، اینترنت قطع می‌شود تا چیزی بی‌حفاظ بیرون نرود.", color = Color.Gray, fontSize = 12.sp)
                 }
-                Switch(checked = Gold.killSwitch, onCheckedChange = { Gold.setKillSwitch(it) })
+                Switch(checked = Gold.killSwitch, onCheckedChange = { Gold.updateKillSwitch(it) })
             }
             Text("برای قفل کامل، در تنظیمات اندروید «VPN همیشه روشن» و «مسدود کردن اتصال‌های بدون VPN» را هم فعال کنید.", color = Color.Gray, fontSize = 12.sp)
         }

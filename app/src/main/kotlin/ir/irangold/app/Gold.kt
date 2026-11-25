@@ -44,8 +44,8 @@ object Gold {
         refreshImportSummary()
     }
 
-    fun setKillSwitch(v: Boolean) { killSwitch = v; prefs.killSwitch = v }
-    fun setEngineMode(v: String) { engineMode = v; prefs.engineMode = v }
+    fun updateKillSwitch(v: Boolean) { killSwitch = v; prefs.killSwitch = v }
+    fun updateEngineMode(v: String) { engineMode = v; prefs.engineMode = v }
 
     private fun refreshImportSummary() {
         importSummary = secrets.get(XrayEngine.CONFIG_KEY)?.let {
