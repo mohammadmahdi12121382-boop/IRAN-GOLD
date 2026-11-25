@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-24.04
@@ -41,3 +41,12 @@ jobs:
           path: |
             output/IRAN-GOLD.apk
             output/SHA256.txt
+      - name: Publish release (direct APK download for phones)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" output/IRAN-GOLD.apk output/SHA256.txt \
+            --title "IRAN GOLD $TAG" \
+            --notes "Debug-signed sideload build of commit ${GITHUB_SHA::7}. SHA-256 in SHA256.txt. Not tested on devices yet." \
+            --prerelease
