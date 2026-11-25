@@ -93,7 +93,14 @@ class Controller(
         }
         active = winner
         since = clock()
-        dataPlane.establish(winner.localProxy()!!)
+        try {
+            dataPlane.establish(winner.localProxy()!!)
+        } catch (ex: Exception) {
+            safeStop(winner)
+            active = null
+            failClosed("ساخت مسیر VPN ناموفق بود: " + Redactor.redact(ex.message ?: ex.javaClass.simpleName))
+            return false
+        }
         publish(Phase.CONNECTED, winner, bestReport, bestScore, "متصل از طریق ${winner.displayName}")
         true
     }

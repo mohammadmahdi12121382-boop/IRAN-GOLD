@@ -47,8 +47,13 @@ class GoldVpnService : VpnService() {
                   log-level: error
                 """.trimIndent() + "\n",
             )
-            TProxyService.TProxyStartService(cfg.absolutePath, fd.fd)
-            cfg.delete()
+            // NOTE: do NOT delete cfg here: hev reads it from its own thread after this call returns.
+            // (It holds only ports/addresses, no secrets.)
+            val started = TProxyService.TProxyStartService(cfg.absolutePath, fd.fd)
+            Thread.sleep(400)
+            if (!started || !TProxyService.TProxyIsRunning()) {
+                throw IllegalStateException("موتور تونل (hev) اجرا نشد")
+            }
         }
 
         @Synchronized override fun teardown() {
