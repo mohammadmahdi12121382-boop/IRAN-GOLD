@@ -39,7 +39,8 @@ object SnowflakeDefaults {
  * Tor (BSD-3, libtor.so from the tor-android AAR) over Snowflake (IPtProxy, MIT).
  * Needs nothing from the user: no server, no account, no payment.
  */
-class TorEngine(private val ctx: Context) : ProcessEngine() {
+class TorEngine(private val ctx: Context, private val secrets: SecretStore) : ProcessEngine() {
+    companion object { const val BRIDGES_KEY = "tor.bridges" }
     override val id = "tor"
     override val displayName = "Tor + Snowflake"
 
@@ -56,14 +57,19 @@ class TorEngine(private val ctx: Context) : ProcessEngine() {
         stop()
         state = EngineState.STARTING
         var lastErr = "Tor اجرا نشد"
-        for ((i, v) in SnowflakeDefaults.VARIANTS.withIndex()) {
-            Gold.progress("Tor: روش ${i + 1} از ${SnowflakeDefaults.VARIANTS.size} (${v.name})…")
+        val bridges = secrets.get(BRIDGES_KEY)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        val plan = ArrayList<SnowflakeVariant?>()
+        if (bridges.isNotEmpty()) plan.add(null) // null = user's obfs4 bridges, tried first
+        plan.addAll(SnowflakeDefaults.VARIANTS)
+        for ((i, v) in plan.withIndex()) {
+            val label = v?.name ?: "بریج obfs4"
+            Gold.progress("Tor: روش ${i + 1} از ${plan.size} ($label)…")
             try {
-                launch(v)
+                launch(v, bridges)
                 state = EngineState.RUNNING
                 return
             } catch (e: Exception) {
-                lastErr = "${v.name}: ${e.message}"
+                lastErr = "$label: ${e.message}"
                 stopProcessOnly()
             }
         }
@@ -81,9 +87,9 @@ class TorEngine(private val ctx: Context) : ProcessEngine() {
         snowflake = null
     }
 
-    private fun launch(v: SnowflakeVariant) {
+    private fun launch(v: SnowflakeVariant?, bridges: List<String>) {
         val sf = SnowflakeBridge(ctx).also { snowflake = it }
-        val snowPort = sf.start(v)
+        val ptPort = if (v == null) sf.startObfs4() else sf.start(v)
         port = NetUtil.freePort()
         val dataDir = File(ctx.filesDir, "tor").apply { mkdirs() }
         File(dataDir, "data").deleteRecursively() // fresh state per attempt
@@ -97,9 +103,10 @@ class TorEngine(private val ctx: Context) : ProcessEngine() {
             SafeLogging 1
             Log notice stdout
             UseBridges 1
-            ClientTransportPlugin snowflake socks5 127.0.0.1:$snowPort
-            Bridge snowflake 192.0.2.3:1 ${SnowflakeDefaults.BRIDGE_FINGERPRINT}
-            """.trimIndent() + "\n",
+            """.trimIndent() + "\n" + (
+                if (v == null) "ClientTransportPlugin obfs4 socks5 127.0.0.1:$ptPort\n" + bridges.joinToString("") { "Bridge $it\n" }
+                else "ClientTransportPlugin snowflake socks5 127.0.0.1:$ptPort\nBridge snowflake 192.0.2.3:1 ${SnowflakeDefaults.BRIDGE_FINGERPRINT}\n"
+                ),
         )
         val boot = java.util.concurrent.atomic.AtomicBoolean(false)
         val p = ProcessBuilder(bin.absolutePath, "-f", torrc.absolutePath)
@@ -108,7 +115,7 @@ class TorEngine(private val ctx: Context) : ProcessEngine() {
         val pct = Regex("Bootstrapped (\\d+)%")
         pump(p) { line ->
             pct.find(line)?.let { m ->
-                Gold.progress("Tor (${v.name}): ${m.groupValues[1]}%")
+                Gold.progress("Tor (${v?.name ?: "obfs4"}): ${m.groupValues[1]}%")
                 if (m.groupValues[1] == "100") boot.set(true)
             }
         }

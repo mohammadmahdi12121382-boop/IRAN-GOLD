@@ -35,33 +35,54 @@ class XrayEngine(private val ctx: Context, private val secrets: SecretStore) : P
         val text = secrets.get(CONFIG_KEY) ?: throw EngineException("کانفیگی وارد نشده است")
         stop()
         state = EngineState.STARTING
+        var lastErr = "Xray اجرا نشد"
+        val cands = candidates(text).take(6)
+        for ((i, cand) in cands.withIndex()) {
+            Gold.progress("Xray: آزمایش کانفیگ ${i + 1} از ${cands.size}…")
+            try {
+                launch(cand)
+                // With several configs (subscription) keep the first one that really passes a quick end-to-end check.
+                if (cands.size > 1) {
+                    val rep = ir.irangold.core.HealthChecker(ir.irangold.core.ProxyEndpoint("127.0.0.1", port), speedTest = false, timeoutMs = 8000).run()
+                    if (!rep.ok) throw EngineException("کانفیگ ${i + 1}: ${rep.failedStage}")
+                }
+                state = EngineState.RUNNING
+                return
+            } catch (e: Exception) {
+                lastErr = e.message ?: lastErr
+                val p = proc; proc = null
+                p?.destroy()
+            }
+        }
+        stop()
+        state = EngineState.FAILED
+        throw EngineException(lastErr)
+    }
+
+    private fun launch(cand: String) {
         port = NetUtil.freePort()
         val json = try {
-            buildConfig(text, port)
+            buildConfig(cand, port)
         } catch (e: ConfigException) {
-            state = EngineState.FAILED
             throw EngineException(e.message ?: "کانفیگ نامعتبر")
         }
-        try {
-            val p = ProcessBuilder(bin.absolutePath, "run", "-c", "stdin:")
-                .directory(ctx.filesDir)
-                .redirectErrorStream(true)
-                .start()
-            proc = p
-            p.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) } // config in, then EOF
-            pump(p)
-            waitForPort(10_000)
-            state = EngineState.RUNNING
-        } catch (e: Exception) {
-            val msg = e.message
-            stop()
-            state = EngineState.FAILED
-            throw if (e is EngineException) e else EngineException(msg ?: "Xray اجرا نشد", e)
-        }
+        val p = ProcessBuilder(bin.absolutePath, "run", "-c", "stdin:")
+            .directory(ctx.filesDir).redirectErrorStream(true).start()
+        proc = p
+        p.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) } // config in, then EOF
+        pump(p)
+        waitForPort(10_000)
     }
 
     companion object {
         const val CONFIG_KEY = "xray.import"
+
+        /** One entry per vless:// line (a subscription), or the whole text for a JSON config. */
+        fun candidates(text: String): List<String> {
+            val t = text.trim()
+            if (t.startsWith("{")) return listOf(t)
+            return t.lines().map { it.trim() }.filter { it.startsWith("vless://", ignoreCase = true) }
+        }
 
         fun buildConfig(text: String, socksPort: Int): String {
             val t = text.trim()
@@ -74,10 +95,13 @@ class XrayEngine(private val ctx: Context, private val secrets: SecretStore) : P
 
         /** Validates an import (throws ConfigException) and returns a secret-free one-line summary. */
         fun validate(text: String): String {
-            val t = text.trim()
-            buildConfig(t, 10808)
-            return if (t.startsWith("vless://", ignoreCase = true)) {
-                val c = VlessUri.parse(t)
+            val list = candidates(text)
+            if (list.isEmpty()) throw ConfigException("هیچ لینک vless:// یا JSON معتبری پیدا نشد")
+            for (c in list) buildConfig(c, 10808) // every entry must be valid and safe
+            if (list.size > 1) return "${list.size} کانفیگ VLESS (اشتراک)"
+            val one = list[0]
+            return if (one.startsWith("vless://", ignoreCase = true)) {
+                val c = VlessUri.parse(one)
                 "VLESS · ${c.security.uppercase()} · ${c.network}" + if (c.name.isNotEmpty()) " · ${c.name}" else ""
             } else {
                 "کانفیگ JSON"

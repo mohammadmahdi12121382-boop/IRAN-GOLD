@@ -235,7 +235,7 @@ private fun SettingsScreen(back: () -> Unit) {
             Text("وارد کردن کانفیگ Xray (VLESS)", color = Color.White, fontWeight = FontWeight.Medium)
             Text("کانفیگ شما: ${Gold.importSummary ?: "هنوز وارد نشده"}", color = Color.Gray, fontSize = 13.sp)
             Text("این برنامه هیچ سرور یا کلیدی همراه ندارد؛ فقط کانفیگی را که خودتان دارید می‌پذیرد.", color = Color.Gray, fontSize = 12.sp)
-            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("لینک vless:// یا JSON") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5)
+            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("لینک vless:// ، لینک اشتراک https یا JSON") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { doImport(text) }, enabled = text.isNotBlank()) { Text("ذخیره") }
                 OutlinedButton(onClick = {
@@ -250,6 +250,20 @@ private fun SettingsScreen(back: () -> Unit) {
                 if (Gold.importSummary != null) TextButton(onClick = { Gold.clearImport(); msg = "حذف شد"; err = false }) { Text("حذف", color = Bad) }
             }
             msg?.let { Text(it, color = if (err) Bad else Ok, fontSize = 13.sp) }
+        }
+        var bridgeText by remember { mutableStateOf("") }
+        InfoCard {
+            Text("بریج Tor (obfs4) — اختیاری", color = Color.White, fontWeight = FontWeight.Medium)
+            Text("اگر Snowflake وصل نشد: بریج رایگان را از ربات تلگرام @GetBridgesBot یا ایمیل bridges@torproject.org بگیرید و اینجا بچسبانید (هر بریج در یک خط).", color = Color.Gray, fontSize = 12.sp)
+            Text("بریج‌های ذخیره‌شده: ${Gold.bridgeCount}", color = Color.Gray, fontSize = 13.sp)
+            OutlinedTextField(value = bridgeText, onValueChange = { bridgeText = it }, label = { Text("obfs4 IP:PORT FINGERPRINT cert=… iat-mode=0") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 6)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    try { Gold.importBridges(bridgeText); bridgeText = ""; err = false; msg = "بریج‌ها ذخیره شد (رمزنگاری‌شده)" }
+                    catch (e: ConfigException) { err = true; msg = e.message }
+                }, enabled = bridgeText.isNotBlank()) { Text("ذخیره بریج") }
+                if (Gold.bridgeCount > 0) TextButton(onClick = { Gold.clearBridges(); msg = "بریج‌ها حذف شد"; err = false }) { Text("حذف", color = Bad) }
+            }
         }
         InfoCard {
             Text("درباره", color = Color.White, fontWeight = FontWeight.Medium)

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import ir.irangold.core.ConfigException
 import ir.irangold.core.Controller
 import ir.irangold.core.ControllerListener
 import ir.irangold.core.DataPlane
@@ -38,10 +39,11 @@ object Gold {
         appCtx = ctx.applicationContext
         prefs = Prefs(appCtx)
         secrets = SecretStore(appCtx)
-        engines = listOf(XrayEngine(appCtx, secrets), TorEngine(appCtx))
+        engines = listOf(XrayEngine(appCtx, secrets), TorEngine(appCtx, secrets))
         killSwitch = prefs.killSwitch
         engineMode = prefs.engineMode
         refreshImportSummary()
+        bridgeCount = secrets.get(TorEngine.BRIDGES_KEY)?.lines()?.size ?: 0
     }
 
     fun updateKillSwitch(v: Boolean) { killSwitch = v; prefs.killSwitch = v }
@@ -55,10 +57,48 @@ object Gold {
 
     /** Throws ConfigException (Persian message) for anything invalid or unsafe; stores nothing in that case. */
     fun importConfig(text: String) {
-        XrayEngine.validate(text)
-        secrets.put(XrayEngine.CONFIG_KEY, text.trim())
+        var body = text.trim()
+        if (body.startsWith("https://", ignoreCase = true)) body = fetchSubscription(body)
+        else if (body.startsWith("http://", ignoreCase = true)) throw ConfigException("فقط لینک https پذیرفته می‌شود")
+        val list = XrayEngine.candidates(body)
+        XrayEngine.validate(body)
+        secrets.put(XrayEngine.CONFIG_KEY, if (body.startsWith("{")) body else list.joinToString("\n"))
         refreshImportSummary()
     }
+
+    /** Downloads a subscription (https only, normal certificate checks, 512 KB cap) and decodes base64 if needed. */
+    private fun fetchSubscription(url: String): String {
+        val raw = try {
+            val c = URL(url).openConnection() as HttpsURLConnection
+            c.connectTimeout = 10_000; c.readTimeout = 10_000
+            c.inputStream.use { it.readNBytes(512 * 1024 + 1) }
+        } catch (e: Exception) {
+            throw ConfigException("دریافت لینک اشتراک ناموفق بود")
+        }
+        if (raw.size > 512 * 1024) throw ConfigException("پاسخ لینک اشتراک خیلی بزرگ است")
+        val text = String(raw, Charsets.UTF_8).trim()
+        if (text.contains("://")) return text
+        return try {
+            String(android.util.Base64.decode(text, android.util.Base64.DEFAULT), Charsets.UTF_8)
+        } catch (e: Exception) {
+            throw ConfigException("فرمت لینک اشتراک شناخته نشد")
+        }
+    }
+
+    // --- Tor bridges (obfs4), obtained by the user from bridges.torproject.org / @GetBridgesBot / bridges@torproject.org
+    private val OBFS4 = Regex("^(?:Bridge\\s+)?obfs4\\s+\\S+:\\d{1,5}\\s+[A-Fa-f0-9]{40}\\s+cert=[A-Za-z0-9+/=]+(?:\\s+iat-mode=[0-2])?$")
+
+    fun importBridges(text: String) {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) throw ConfigException("بریجی وارد نشده است")
+        if (lines.size > 6) throw ConfigException("حداکثر ۶ بریج")
+        for (l in lines) if (!OBFS4.matches(l)) throw ConfigException("فرمت بریج obfs4 معتبر نیست (باید مثل: obfs4 IP:PORT FINGERPRINT cert=... iat-mode=0)")
+        secrets.put(TorEngine.BRIDGES_KEY, lines.joinToString("\n") { it.removePrefix("Bridge ").trim() })
+        bridgeCount = lines.size
+    }
+
+    fun clearBridges() { secrets.remove(TorEngine.BRIDGES_KEY); bridgeCount = 0 }
+    var bridgeCount by mutableStateOf(0)
 
     fun clearImport() { secrets.remove(XrayEngine.CONFIG_KEY); refreshImportSummary() }
 
