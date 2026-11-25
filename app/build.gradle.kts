@@ -55,7 +55,7 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     // Tor daemon binary (libtor.so) from the Guardian Project repo
-    implementation("info.guardianproject:tor-android:0.4.9.17")
+    implementation("info.guardianproject:tor-android:0.4.8.16")
     // Snowflake pluggable transport (MIT)
     implementation("com.netzarchitekten:IPtProxy:5.7.0")
 }
